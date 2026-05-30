@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
 import Image from "next/image";
 import {
   ArrowRight,
@@ -13,6 +14,7 @@ import {
   Menu,
   MessageCircle,
   Phone,
+  PlayCircle,
   ShieldCheck,
   Star,
   Timer,
@@ -22,6 +24,8 @@ import {
 
 const phoneNumber = "(212) 555-0198";
 const phoneHref = "tel:+12125550198";
+const heroVideoSrc =
+  "https://videos.pexels.com/video-files/7584762/7584762-uhd_3840_2160_25fps.mp4";
 
 const services = [
   {
@@ -80,7 +84,47 @@ const testimonials = [
   },
 ];
 
-const boroughs = ["Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island"];
+type ServiceAreaName = "Manhattan" | "Brooklyn" | "Queens" | "Bronx" | "Staten Island";
+
+type ServiceArea = {
+  name: ServiceAreaName;
+  coordinates: [number, number];
+  response: string;
+  description: string;
+};
+
+const serviceAreas: ServiceArea[] = [
+  {
+    name: "Manhattan",
+    coordinates: [40.7831, -73.9712],
+    response: "15-35 min response",
+    description: "High-rise apartments, brownstones, condos, and commercial calls.",
+  },
+  {
+    name: "Brooklyn",
+    coordinates: [40.6782, -73.9442],
+    response: "20-45 min response",
+    description: "Emergency leaks, drain backups, and water heater service.",
+  },
+  {
+    name: "Queens",
+    coordinates: [40.7282, -73.7949],
+    response: "20-45 min response",
+    description: "Fast plumbing help for homes, co-ops, and local businesses.",
+  },
+  {
+    name: "Bronx",
+    coordinates: [40.8448, -73.8648],
+    response: "25-50 min response",
+    description: "Prepared technicians for urgent repairs and fixture issues.",
+  },
+  {
+    name: "Staten Island",
+    coordinates: [40.5795, -74.1502],
+    response: "30-60 min response",
+    description: "Scheduled service and emergency response across the island.",
+  },
+];
 
 function CallButton({ className = "" }: { className?: string }) {
   return (
@@ -131,7 +175,101 @@ function Stars() {
 
 export default function Home() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [activeArea, setActiveArea] = useState<ServiceAreaName>("Manhattan");
+  const heroVideoRef = useRef<HTMLVideoElement>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<LeafletMap | null>(null);
+  const markerRefs = useRef<Record<ServiceAreaName, LeafletMarker | null>>({
+    Manhattan: null,
+    Brooklyn: null,
+    Queens: null,
+    Bronx: null,
+    "Staten Island": null,
+  });
   const closeMenu = () => setIsMenuOpen(false);
+
+  useEffect(() => {
+    heroVideoRef.current?.play().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function initMap() {
+      const L = await import("leaflet");
+
+      if (cancelled || !mapContainerRef.current || mapInstanceRef.current) {
+        return;
+      }
+
+      const map = L.map(mapContainerRef.current, {
+        attributionControl: false,
+        scrollWheelZoom: false,
+        zoomControl: false,
+      }).setView([40.7128, -74.006], 10);
+
+      L.control.zoom({ position: "bottomright" }).addTo(map);
+      L.control
+        .attribution({
+          prefix: false,
+          position: "bottomleft",
+        })
+        .addAttribution("&copy; OpenStreetMap")
+        .addTo(map);
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+      }).addTo(map);
+
+      serviceAreas.forEach((area, index) => {
+        const marker = L.marker(area.coordinates, {
+          icon: L.divIcon({
+            className: "",
+            html: `<span class="area-marker">${index + 1}</span>`,
+            iconAnchor: [17, 17],
+            popupAnchor: [0, -18],
+          }),
+        })
+          .addTo(map)
+          .bindPopup(
+            `<strong>${area.name}</strong><br>${area.response}<br>${area.description}`,
+          );
+
+        marker.on("click", () => setActiveArea(area.name));
+        markerRefs.current[area.name] = marker;
+      });
+
+      mapInstanceRef.current = map;
+    }
+
+    initMap();
+
+    return () => {
+      cancelled = true;
+      mapInstanceRef.current?.remove();
+      mapInstanceRef.current = null;
+      markerRefs.current = {
+        Manhattan: null,
+        Brooklyn: null,
+        Queens: null,
+        Bronx: null,
+        "Staten Island": null,
+      };
+    };
+  }, []);
+
+  useEffect(() => {
+    const area = serviceAreas.find((item) => item.name === activeArea);
+    const map = mapInstanceRef.current;
+    const marker = markerRefs.current[activeArea];
+
+    if (!area || !map || !marker) {
+      return;
+    }
+
+    map.flyTo(area.coordinates, 11, { duration: 0.7 });
+    marker.openPopup();
+  }, [activeArea]);
 
   return (
     <main className="min-h-screen bg-white pb-20 text-ink md:pb-0">
@@ -237,18 +375,32 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="relative overflow-hidden bg-[linear-gradient(135deg,#f4f9ff_0%,#ffffff_46%,#fff4ec_100%)]">
+      <section className="relative min-h-[760px] overflow-hidden bg-ink text-white">
+        <video
+          ref={heroVideoRef}
+          className="absolute inset-0 h-full w-full object-cover"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          aria-hidden="true"
+        >
+          <source src={heroVideoSrc} type="video/mp4" />
+        </video>
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(16,32,51,0.92)_0%,rgba(16,32,51,0.78)_42%,rgba(16,32,51,0.42)_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_82%_20%,rgba(243,107,33,0.34),transparent_32%),linear-gradient(180deg,rgba(18,60,124,0.22),rgba(16,32,51,0.2))]" />
         <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-r from-navy via-signal to-navy" />
-        <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-14 sm:px-6 sm:py-18 lg:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:py-24">
+        <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 sm:px-6 sm:py-20 lg:min-h-[760px] lg:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:py-24">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-navy shadow-sm">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-bold text-white shadow-sm backdrop-blur">
               <Clock className="h-4 w-4 text-signal" aria-hidden="true" />
               NYC emergency plumbers on call now
             </div>
-            <h1 className="mt-6 max-w-4xl text-4xl font-black leading-[1.02] tracking-tight text-ink sm:text-5xl lg:text-6xl">
+            <h1 className="mt-6 max-w-4xl text-4xl font-black leading-[1.02] tracking-tight text-white sm:text-5xl lg:text-6xl">
               24/7 Emergency Plumbing Services in NYC
             </h1>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600 sm:text-xl">
+            <p className="mt-5 max-w-2xl text-lg leading-8 text-blue-50 sm:text-xl">
               Fast, licensed, and reliable plumbers at your doorstep in minutes.
               Clear estimates, respectful technicians, and urgent help when water
               cannot wait.
@@ -258,20 +410,20 @@ export default function Home() {
               <CallButton className="w-full sm:w-auto" />
               <a
                 href="#contact"
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-navy/20 bg-white px-6 py-3 text-sm font-bold text-navy shadow-sm transition hover:-translate-y-0.5 hover:border-navy/35 hover:bg-mist focus:outline-none focus:ring-4 focus:ring-blue-100"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white px-6 py-3 text-sm font-bold text-navy shadow-sm transition hover:-translate-y-0.5 hover:bg-mist focus:outline-none focus:ring-4 focus:ring-white/20"
               >
                 Get Free Estimate
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </a>
             </div>
 
-            <div className="mt-8 grid gap-3 text-sm font-bold text-slate-700 sm:grid-cols-3">
+            <div className="mt-8 grid gap-3 text-sm font-bold text-white sm:grid-cols-3">
               {["Licensed", "Insured", "10+ Years Experience"].map((badge) => (
                 <div
                   key={badge}
-                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 shadow-sm"
+                  className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-3 shadow-sm backdrop-blur"
                 >
-                  <ShieldCheck className="h-5 w-5 text-emerald-600" aria-hidden="true" />
+                  <ShieldCheck className="h-5 w-5 text-emerald-300" aria-hidden="true" />
                   {badge}
                 </div>
               ))}
@@ -279,9 +431,9 @@ export default function Home() {
           </div>
 
           <div className="relative">
-            <div className="rounded-[1.75rem] border border-white bg-white p-4 shadow-service">
+            <div className="rounded-[1.75rem] bg-white/10 p-4 shadow-2xl shadow-blue-950/30 backdrop-blur-md">
               <div className="overflow-hidden rounded-2xl bg-navy text-white">
-                <div className="bg-[linear-gradient(135deg,#123c7c_0%,#1d5ab2_55%,#f36b21_100%)] p-6 sm:p-8">
+                <div className="bg-[linear-gradient(135deg,rgba(18,60,124,0.96)_0%,rgba(29,90,178,0.92)_55%,rgba(243,107,33,0.92)_100%)] p-6 sm:p-8">
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-100">
@@ -295,7 +447,7 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-                <div className="grid gap-1 bg-white p-6 text-ink sm:grid-cols-3">
+                <div className="grid gap-1 bg-white/95 p-6 text-ink sm:grid-cols-3">
                   {[
                     ["4.9/5", "review rating"],
                     ["24/7", "emergency calls"],
@@ -311,7 +463,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl sm:ml-auto sm:w-72">
+            <div className="mt-4 rounded-2xl border border-white/20 bg-white/95 p-4 shadow-xl sm:ml-auto sm:w-72">
               <div className="flex items-start gap-3">
                 <BadgeCheck className="mt-1 h-5 w-5 shrink-0 text-emerald-600" aria-hidden="true" />
                 <div>
@@ -363,6 +515,56 @@ export default function Home() {
                 </article>
               );
             })}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-[linear-gradient(135deg,#102033_0%,#123c7c_62%,#f36b21_140%)] px-4 py-20 text-white sm:px-6 lg:px-8">
+        <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-center">
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-black shadow-2xl shadow-blue-950/30">
+            <div className="aspect-video">
+              <iframe
+                className="h-full w-full"
+                src="https://www.youtube.com/embed/YHu8Qmqg8y8?rel=0&modestbranding=1"
+                title="F&E NYC Plumbing service video"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                loading="lazy"
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-bold text-blue-50">
+              <PlayCircle className="h-4 w-4 text-signal" aria-hidden="true" />
+              See our work before you call
+            </div>
+            <h2 className="mt-5 text-3xl font-black tracking-tight sm:text-4xl">
+              Know who is coming before there is water on the floor.
+            </h2>
+            <p className="mt-4 text-lg leading-8 text-blue-50">
+              Watch a quick look at the kind of clean, professional plumbing service
+              NYC homeowners expect: clear communication, prepared technicians, and
+              repairs done with care.
+            </p>
+            <div className="mt-7 grid gap-3 text-sm font-bold sm:grid-cols-2">
+              {["Fast dispatch", "Licensed techs", "Clean repairs", "Clear estimates"].map((item) => (
+                <div key={item} className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-3">
+                  <BadgeCheck className="h-5 w-5 text-emerald-300" aria-hidden="true" />
+                  {item}
+                </div>
+              ))}
+            </div>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <CallButton className="w-full sm:w-auto" />
+              <a
+                href="#contact"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white px-6 py-3 text-sm font-bold text-navy shadow-sm transition hover:-translate-y-0.5 hover:bg-mist focus:outline-none focus:ring-4 focus:ring-white/20"
+              >
+                Request Service
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </a>
+            </div>
           </div>
         </div>
       </section>
@@ -438,25 +640,87 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="areas" className="px-4 py-16 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-[0.18em] text-signal">Service Areas</p>
-              <h2 className="mt-2 text-2xl font-black text-ink sm:text-3xl">
-                Emergency plumbing across New York City
-              </h2>
+      <section id="areas" className="bg-white px-4 py-20 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="mx-auto mb-10 max-w-3xl text-center">
+            <p className="text-sm font-bold uppercase tracking-[0.18em] text-signal">Service Areas</p>
+            <h2 className="mt-3 text-3xl font-black tracking-tight text-ink sm:text-4xl">
+              Emergency plumbing coverage across New York City
+            </h2>
+            <p className="mt-4 text-base leading-7 text-slate-600 sm:text-lg">
+              Select a borough to see where our NYC dispatch team is ready for urgent leaks,
+              clogged drains, water heaters, and same-day plumbing repairs.
+            </p>
+          </div>
+
+          <div className="grid overflow-hidden rounded-xl border border-slate-200 bg-white shadow-service lg:grid-cols-[0.92fr_1.08fr]">
+            <div className="bg-[linear-gradient(180deg,#f8fbff_0%,#eef6ff_100%)] p-5 sm:p-7 lg:p-8">
+              <div className="rounded-xl bg-ink p-5 text-white shadow-xl shadow-blue-950/15">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-signal">
+                    <MapPin className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-100">
+                      Live NYC Coverage
+                    </p>
+                    <p className="mt-1 text-2xl font-black">5 borough dispatch</p>
+                  </div>
+                </div>
+                <p className="mt-4 text-sm leading-6 text-slate-300">
+                  Tap an area below to center the map and view response details for that location.
+                </p>
+              </div>
+
+              <div className="mt-5 grid gap-3">
+                {serviceAreas.map((area, index) => {
+                  const isActive = activeArea === area.name;
+
+                  return (
+                    <button
+                      key={area.name}
+                      type="button"
+                      onClick={() => setActiveArea(area.name)}
+                      className={`group rounded-xl border p-4 text-left transition ${
+                        isActive
+                          ? "border-navy bg-white shadow-lg shadow-blue-900/10"
+                          : "border-slate-200 bg-white/70 hover:border-blue-200 hover:bg-white"
+                      }`}
+                      aria-pressed={isActive}
+                    >
+                      <span className="flex items-start gap-3">
+                        <span
+                          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black ${
+                            isActive ? "bg-signal text-white" : "bg-blue-50 text-navy"
+                          }`}
+                        >
+                          {index + 1}
+                        </span>
+                        <span>
+                          <span className="block text-base font-black text-ink">{area.name}</span>
+                          <span className="mt-1 block text-sm font-bold text-signal">{area.response}</span>
+                          <span className="mt-2 block text-sm leading-6 text-slate-600">
+                            {area.description}
+                          </span>
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-3">
-              {boroughs.map((borough) => (
-                <span
-                  key={borough}
-                  className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-sm font-bold text-navy"
-                >
-                  <MapPin className="h-4 w-4" aria-hidden="true" />
-                  {borough}
-                </span>
-              ))}
+
+            <div className="relative min-h-[430px] bg-slate-100 lg:min-h-[650px]">
+              <div ref={mapContainerRef} className="absolute inset-0" aria-label="NYC service areas map" />
+              <div className="pointer-events-none absolute left-4 right-4 top-4 rounded-xl border border-white/40 bg-white/90 p-4 shadow-xl backdrop-blur sm:left-auto sm:w-80">
+                <p className="text-sm font-bold uppercase tracking-[0.18em] text-signal">
+                  Selected Area
+                </p>
+                <p className="mt-1 text-2xl font-black text-ink">{activeArea}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {serviceAreas.find((area) => area.name === activeArea)?.description}
+                </p>
+              </div>
             </div>
           </div>
         </div>
